@@ -277,35 +277,42 @@ window.SURVEY = {"title": "Contrastive Discovery — Human Study (pilot)", "scre
 
     app.innerHTML=`<p class="eyebrow">Complete</p><h1>Thank you — that's everything</h1>
       <p class="lead">Your responses have been recorded.</p>
-      <p class="note" id="sink"></p>` +
-      (done ? `<div class="dl"><button class="go" id="finish">Finish &amp; return to the study</button></div>`
-            : `<div class="dl"><button class="go" id="dljson">Download responses (JSON)</button>
-               <button class="ghost" id="dlcsv">Download responses (CSV)</button></div>
-               <p class="note">Preview mode — responses stay in this browser.</p>`);
+      <p class="note" id="sink"></p><div class="dl" id="acts"></div>`;
+    const acts=app.querySelector('#acts'), sink=app.querySelector('#sink');
+
+    const dl=(name,text,type)=>{const b=new Blob([text],{type});const u=URL.createObjectURL(b);
+      const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);};
+    function offerDownload(cls){
+      const b=document.createElement('button'); b.className=cls; b.id='dljson';
+      b.textContent='Download your responses';
+      b.addEventListener('click',()=>dl('responses.json',JSON.stringify(payload,null,2),'application/json'));
+      acts.appendChild(b);
+    }
+    function offerFinish(cls){
+      const b=document.createElement('button'); b.className=cls; b.textContent='Finish';
+      b.addEventListener('click',()=>location.href=CFG.completion_url);
+      acts.appendChild(b);
+    }
 
     if(hosted){
-      const el=app.querySelector('#sink'); el.textContent='Saving…';
+      sink.textContent='Saving…';
       const body=JSON.stringify({experimentID:CFG.datapipe_id,
         filename:(PID.prolific_pid||'anon')+'_'+Date.now()+'.json',
         data:JSON.stringify(payload)});
       fetch(CFG.data_url,{method:'POST',headers:{'Content-Type':'application/json'},body})
         .then(r=>r.json())
-        .then(j=>{el.textContent = (j&&j.message==='Success') ? 'Saved.' :
-          'We could not save your responses automatically. Please contact the researcher.';})
-        .catch(()=>{el.textContent='We could not save your responses automatically. Please contact the researcher.';});
-    }
-
-    if(done){
-      app.querySelector('#finish').addEventListener('click',()=>location.href=CFG.completion_url);
+        .then(j=>{
+          if(j&&j.message==='Success'){ sink.textContent=''; if(done) offerFinish('go'); }
+          else throw new Error('save failed');
+        })
+        .catch(()=>{
+          sink.textContent='We could not save your responses automatically. Please download '+
+            'the file below and send it to the researcher, then continue.';
+          offerDownload('go');
+          if(done) offerFinish('ghost');
+        });
     } else {
-      const dl=(name,text,type)=>{const b=new Blob([text],{type});const u=URL.createObjectURL(b);
-        const a=document.createElement('a');a.href=u;a.download=name;a.click();URL.revokeObjectURL(u);};
-      app.querySelector('#dljson').addEventListener('click',()=>dl('responses.json',JSON.stringify(payload,null,2),'application/json'));
-      app.querySelector('#dlcsv').addEventListener('click',()=>{
-        const cols=['type','card_id','q1_display_idx','q1_canonical_idx','q1_kind',
-          'q_set','q_set_text','q_value','perm','key','value','correct','ts'];
-        const rows=[cols.join(',')].concat(st.resp.map(r=>cols.map(c=>JSON.stringify(r[c]==null?'':r[c])).join(',')));
-        dl('responses.csv',rows.join('\n'),'text/csv');});
+      offerDownload('go');
     }
   }
 
